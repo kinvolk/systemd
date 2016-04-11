@@ -181,6 +181,7 @@ static SettingsMask arg_settings_mask = 0;
 static int arg_settings_trusted = -1;
 static char **arg_parameters = NULL;
 static const char *arg_container_service_name = "systemd-nspawn";
+static bool *arg_defer_notify = false;
 
 static void help(void) {
         printf("%s [OPTIONS...] [PATH] [ARGUMENTS...]\n\n"
@@ -962,6 +963,10 @@ static int parse_argv(int argc, char *argv[]) {
         e = getenv("SYSTEMD_NSPAWN_CONTAINER_SERVICE");
         if (e)
                 arg_container_service_name = e;
+
+        e = getenv("SYSTEMD_NSPAWN_DEFER_NOTIFY_READY");
+        if (e)
+                arg_defer_notify = true;
 
         return 1;
 }
@@ -2488,6 +2493,7 @@ static int inner_child(
                 NULL, /* container_uuid */
                 NULL, /* LISTEN_FDS */
                 NULL, /* LISTEN_PID */
+                NULL, /* NOTIFY_SOCKET */
                 NULL
         };
 
@@ -2606,6 +2612,10 @@ static int inner_child(
 
                 if ((asprintf((char **)(envp + n_env++), "LISTEN_FDS=%u", fdset_size(fds)) < 0) ||
                     (asprintf((char **)(envp + n_env++), "LISTEN_PID=1") < 0))
+                        return log_oom();
+        }
+        if (arg_defer_notify) {
+                if (asprintf((char **)(envp + n_env++), "NOTIFY_SOCKET=/run/systemd/nspawn/notify") < 0)
                         return log_oom();
         }
 
@@ -3621,9 +3631,10 @@ int main(int argc, char *argv[]) {
                 }
 
                 sd_notifyf(false,
-                           "READY=1\n"
                            "STATUS=Container running.\n"
                            "X_NSPAWN_LEADER_PID=" PID_FMT, pid);
+                if (!arg_defer_notify)
+                        sd_notify(false, "READY=1\n");
 
                 r = sd_event_new(&event);
                 if (r < 0) {
