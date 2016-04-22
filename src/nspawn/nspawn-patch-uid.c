@@ -19,7 +19,9 @@
 
 #include <fcntl.h>
 #include <linux/magic.h>
+#ifdef HAVE_ACL
 #include <sys/acl.h>
+#endif
 #include <sys/stat.h>
 #include <sys/vfs.h>
 #include <unistd.h>
@@ -34,6 +36,8 @@
 #include "string-util.h"
 #include "strv.h"
 #include "user-util.h"
+
+#ifdef HAVE_ACL
 
 static int get_acl(int fd, const char *name, acl_type_t type, acl_t *ret) {
         char procfs_path[strlen("/proc/self/fd/") + DECIMAL_STR_MAX(int) + 1];
@@ -226,6 +230,14 @@ static int patch_acls(int fd, const char *name, const struct stat *st, uid_t shi
 
         return changed;
 }
+
+#else
+
+static int patch_acls(int fd, const char *name, const struct stat *st, uid_t shift) {
+        return 0;
+}
+
+#endif
 
 static int patch_fd(int fd, const char *name, const struct stat *st, uid_t shift) {
         uid_t new_uid;
