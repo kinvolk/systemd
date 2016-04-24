@@ -2299,7 +2299,7 @@ static int recursive_chown(const char *directory, uid_t shift, uid_t range) {
         if (r == -EBADE)
                 return log_error_errno(r, "Upper 16 bits of root directory UID and GID do not match.");
         if (r < 0)
-                return log_error_errno(r, "Failed to adjust UID/GID shift of OS tree: %m");
+                return log_error_errno(r, "Failed to adjust UID/GID shift of OS tree (directory: %s): %m", directory);
         if (r == 0)
                 log_debug("Root directory of image is already owned by the right UID/GID range, skipping recursive chown operation.");
         else

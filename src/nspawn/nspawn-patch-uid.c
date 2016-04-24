@@ -255,12 +255,15 @@ static int patch_fd(int fd, const char *name, const struct stat *st, uid_t shift
                 return -EINVAL;
 
         if (st->st_uid != new_uid || st->st_gid != new_gid) {
-                if (name)
+                if (name) {
                         r = fchownat(fd, name, new_uid, new_gid, AT_SYMLINK_NOFOLLOW);
-                else
+                } else {
                         r = fchown(fd, new_uid, new_gid);
-                if (r < 0)
+                }
+                if (r < 0) {
+                        log_error_errno(errno, "fchown(at) failed (name: %s): %m", name);
                         return -errno;
+                }
 
                 /* The Linux kernel alters the mode in some cases of chown(). Let's undo this. */
                 if (name && !S_ISLNK(st->st_mode))
@@ -310,8 +313,10 @@ static int recurse_fd(int fd, bool donate_fd, const struct stat *st, uid_t shift
         assert(fd >= 0);
 
         r = patch_fd(fd, NULL, st, shift);
-        if (r < 0)
+        if (r < 0) {
+                log_error_errno(r, "patch_fd failed: %m");
                 goto finish;
+        }
 
         if (S_ISDIR(st->st_mode)) {
                 _cleanup_closedir_ DIR *d = NULL;
@@ -335,6 +340,7 @@ static int recurse_fd(int fd, bool donate_fd, const struct stat *st, uid_t shift
                         copy = fcntl(fd, F_DUPFD_CLOEXEC, 3);
                         if (copy < 0) {
                                 r = -errno;
+                                log_error_errno(r, "fcntl failed: %m");
                                 goto finish;
                         }
 
@@ -344,6 +350,7 @@ static int recurse_fd(int fd, bool donate_fd, const struct stat *st, uid_t shift
 
                 d = fdopendir(fd);
                 if (!d) {
+                        log_error_errno(r, "fdopendir failed: %m");
                         r = -errno;
                         goto finish;
                 }
@@ -371,8 +378,10 @@ static int recurse_fd(int fd, bool donate_fd, const struct stat *st, uid_t shift
                                 }
 
                                 r = recurse_fd(subdir_fd, true, &fst, shift);
-                                if (r < 0)
+                                if (r < 0) {
+                                        log_error_errno(errno, "recurse_fd failed (name: %s): %m", de->d_name);
                                         goto finish;
+                                }
                                 if (r > 0)
                                         changed = true;
 
@@ -434,7 +443,11 @@ static int fd_patch_uid_internal(int fd, bool donate_fd, uid_t shift, uid_t rang
         if (((uint32_t) (st.st_uid ^ shift) >> 16) == 0)
                 return 0;
 
-        return recurse_fd(fd, donate_fd, &st, shift);
+        r = recurse_fd(fd, donate_fd, &st, shift);
+        if (r < 0) {
+                log_error_errno(errno, "recurse_fd(2) failed: %m");
+        }
+        return r;
 
 finish:
         if (donate_fd)
