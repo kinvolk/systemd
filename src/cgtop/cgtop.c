@@ -72,6 +72,7 @@ static bool arg_batch = false;
 static bool arg_raw = false;
 static usec_t arg_delay = 1*USEC_PER_SEC;
 static char* arg_machine = NULL;
+static char* arg_root = NULL;
 static bool arg_recursive = true;
 
 static enum {
@@ -653,7 +654,7 @@ static void display(Hashmap *a) {
 }
 
 static void help(void) {
-        printf("%s [OPTIONS...]\n\n"
+        printf("%s [OPTIONS...] [CGROUP]\n\n"
                "Show top control groups by their resource usage.\n\n"
                "  -h --help           Show this help\n"
                "     --version        Show package version\n"
@@ -835,7 +836,13 @@ static int parse_argv(int argc, char *argv[]) {
                         assert_not_reached("Unhandled option");
                 }
 
-        if (optind < argc) {
+        if (optind == argc-1) {
+                if (arg_machine) {
+                        log_error("Specifying a control group path together with the -M option is not allowed");
+                        return -EINVAL;
+                }
+                arg_root = argv[optind];
+        } else if (optind < argc) {
                 log_error("Too many arguments.");
                 return -EINVAL;
         }
@@ -861,8 +868,17 @@ static int get_cgroup_root(char **ret) {
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         _cleanup_free_ char *unit = NULL, *path = NULL;
+        char *arg_root_aux = NULL;
         const char *m;
         int r;
+
+        if (arg_root) {
+                arg_root_aux = strdup(arg_root);
+                if (!arg_root_aux)
+                        return log_oom();
+                *ret = arg_root_aux;
+                return 0;
+        }
 
         if (!arg_machine) {
                 r = cg_get_root_path(ret);
