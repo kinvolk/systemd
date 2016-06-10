@@ -3976,6 +3976,11 @@ int main(int argc, char *argv[]) {
                                 goto finish;
                 }
 
+                /* DEBUG: wait a bit before moving the cgroup */
+                log_info("Sleeping before registering machine '%s' (pid %d)", arg_machine, pid);
+                sleep(10);
+                log_info("Sleeping done");
+
                 if (arg_register) {
                         r = register_machine(
                                         arg_machine,
