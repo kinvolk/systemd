@@ -2712,6 +2712,8 @@ static int inner_child(
         log_close();
         (void) fdset_close_others(fds);
 
+        sleep(15);
+
         if (arg_start_mode == START_BOOT) {
                 char **a;
                 size_t m;
