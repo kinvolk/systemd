@@ -395,9 +395,8 @@ int mount_setup(bool loaded_policy) {
          * nspawn and the container tools work out of the box. If
          * specific setups need other settings they can reset the
          * propagation mode to private if needed. */
-        if (detect_container() <= 0)
-                if (mount(NULL, "/", NULL, MS_REC|MS_SHARED, NULL) < 0)
-                        log_warning_errno(errno, "Failed to set up the root directory for shared mount propagation: %m");
+        if (mount(NULL, "/", NULL, MS_REC|MS_SHARED, NULL) < 0)
+                log_warning_errno(errno, "Failed to set up the root directory for shared mount propagation: %m");
 
         /* Create a few directories we always want around, Note that
          * sd_booted() checks for /run/systemd/system, so this mkdir
