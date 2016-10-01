@@ -1755,6 +1755,9 @@ static int setup_propagate(const char *root) {
         if (mount(NULL, q, NULL, MS_BIND|MS_REMOUNT|MS_RDONLY, NULL) < 0)
                 return log_error_errno(errno, "Failed to make propagation mount read-only");
 
+        if (mount(NULL, q, NULL, MS_SLAVE, NULL) < 0)
+                return log_error_errno(errno, "Failed to make propagation mount slave");
+
         return 0;
 }
 
@@ -2946,6 +2949,9 @@ static int outer_child(
          * propagate mounts to the real root. */
         if (mount(NULL, "/", NULL, MS_SLAVE|MS_REC, NULL) < 0)
                 return log_error_errno(errno, "MS_SLAVE|MS_REC failed: %m");
+
+        if (mount(NULL, "/", NULL, MS_SHARED|MS_REC, NULL) < 0)
+                return log_error_errno(errno, "MS_SHARED|MS_REC failed: %m");
 
         r = mount_devices(directory,
                           root_device, root_device_rw,
