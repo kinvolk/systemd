@@ -208,6 +208,7 @@ static unsigned long arg_clone_ns_flags = CLONE_NEWIPC|CLONE_NEWPID|CLONE_NEWUTS
 static MountSettingsMask arg_mount_settings = MOUNT_APPLY_APIVFS_RO;
 static void *arg_root_hash = NULL;
 static size_t arg_root_hash_size = 0;
+static char *arg_system_call_filter = NULL;
 
 static void help(void) {
         printf("%s [OPTIONS...] [PATH] [ARGUMENTS...]\n\n"
@@ -290,6 +291,8 @@ static void help(void) {
                "     --volatile[=MODE]      Run the system in volatile mode\n"
                "     --settings=BOOLEAN     Load additional settings from .nspawn file\n"
                "     --notify-ready=BOOLEAN Receive notifications from the child init process\n"
+               "     --system-call-filter=SYSCALLS\n"
+               "                            Adds or removes syscalls from the seccomp filter\n"
                , program_invocation_short_name);
 }
 
@@ -430,6 +433,7 @@ static int parse_argv(int argc, char *argv[]) {
                 ARG_PRIVATE_USERS_CHOWN,
                 ARG_NOTIFY_READY,
                 ARG_ROOT_HASH,
+                ARG_SYSTEM_CALL_FILTER,
         };
 
         static const struct option options[] = {
@@ -481,6 +485,7 @@ static int parse_argv(int argc, char *argv[]) {
                 { "pivot-root",            required_argument, NULL, ARG_PIVOT_ROOT          },
                 { "notify-ready",          required_argument, NULL, ARG_NOTIFY_READY        },
                 { "root-hash",             required_argument, NULL, ARG_ROOT_HASH           },
+                { "system-call-filter",    required_argument, NULL, ARG_SYSTEM_CALL_FILTER  },
                 {}
         };
 
@@ -1047,6 +1052,13 @@ static int parse_argv(int argc, char *argv[]) {
                         free(arg_root_hash);
                         arg_root_hash = k;
                         arg_root_hash_size = l;
+                        break;
+                }
+
+                case ARG_SYSTEM_CALL_FILTER: {
+                        r = free_and_strdup(&arg_system_call_filter, optarg);
+                        if (r < 0)
+                                return log_oom();
                         break;
                 }
 
@@ -2407,6 +2419,7 @@ static int outer_child(
                 Barrier *barrier,
                 const char *directory,
                 const char *console,
+                const char *system_call_filter,
                 DissectedImage *dissected_image,
                 bool interactive,
                 bool secondary,
@@ -2584,7 +2597,7 @@ static int outer_child(
         if (r < 0)
                 return r;
 
-        r = setup_seccomp(arg_caps_retain);
+        r = setup_seccomp(arg_caps_retain, system_call_filter);
         if (r < 0)
                 return r;
 
@@ -3100,6 +3113,7 @@ static int run(int master,
                FDSet *fds,
                char veth_name[IFNAMSIZ], bool *veth_created,
                union in_addr_union *exposed,
+               const char *system_call_filter,
                pid_t *pid, int *ret) {
 
         static const struct sigaction sa = {
@@ -3202,6 +3216,7 @@ static int run(int master,
                 r = outer_child(&barrier,
                                 arg_directory,
                                 console,
+                                system_call_filter,
                                 dissected_image,
                                 interactive,
                                 secondary,
@@ -3523,6 +3538,7 @@ int main(int argc, char *argv[]) {
         _cleanup_(loop_device_unrefp) LoopDevice *loop = NULL;
         _cleanup_(decrypted_image_unrefp) DecryptedImage *decrypted_image = NULL;
         _cleanup_(dissected_image_unrefp) DissectedImage *dissected_image = NULL;
+        _cleanup_free_ char *system_call_filter = NULL;
 
         log_parse_environment();
         log_open();
@@ -3841,6 +3857,21 @@ int main(int argc, char *argv[]) {
                 goto finish;
         }
 
+        if (arg_system_call_filter != NULL) {
+                const char *p = arg_system_call_filter;
+                system_call_filter = (char*) malloc(sizeof(arg_system_call_filter));
+                for (;;) {
+                        _cleanup_free_ char *t = NULL;
+                        r = extract_first_word(&p, &t, ",", 0);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to parse syscall %s.", t);
+                        if (r == 0)
+                                break;
+                        strcat(system_call_filter, t);
+                        strcat(system_call_filter, "\0");
+                }
+        }
+
         for (;;) {
                 r = run(master,
                         console,
@@ -3849,6 +3880,7 @@ int main(int argc, char *argv[]) {
                         fds,
                         veth_name, &veth_created,
                         &exposed,
+                        system_call_filter,
                         &pid, &ret);
                 if (r <= 0)
                         break;
@@ -3920,6 +3952,7 @@ finish:
         custom_mount_free_all(arg_custom_mounts, arg_n_custom_mounts);
         expose_port_free_all(arg_expose_ports);
         free(arg_root_hash);
+        free(arg_system_call_filter);
 
         return r < 0 ? EXIT_FAILURE : ret;
 }

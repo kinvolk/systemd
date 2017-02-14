@@ -21,4 +21,21 @@
 
 #include <sys/types.h>
 
-int setup_seccomp(uint64_t cap_list_retain);
+#include "seccomp-util.h"
+
+typedef struct SyscallFilterSetCap {
+        SyscallFilterSet filter;
+        int capability;
+} SyscallFilterSetCap;
+
+enum {
+        SYSCALL_FILTER_SET_CAP_SYSLOG,
+        SYSCALL_FILTER_SET_CAP_SYS_MODULE,
+        SYSCALL_FILTER_SET_CAP_SYS_PACCT,
+        SYSCALL_FILTER_SET_CAP_SYS_PTRACE,
+        SYSCALL_FILTER_SET_CAP_SYS_RAWIO,
+        SYSCALL_FILTER_SET_CAP_SYS_TIME,
+        _SYSCALL_FILTER_CAPS_SET_MAX
+};
+
+int setup_seccomp(uint64_t cap_list_retain, const char *system_call_filter);
