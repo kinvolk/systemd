@@ -43,74 +43,56 @@ static int seccomp_add_default_syscall_filter(
 
         static const struct {
                 uint64_t capability;
-                int syscall_num;
+                const char *syscall_name;
         } blacklist[] = {
-                { 0,              SCMP_SYS(_sysctl)             }, /* obsolete syscall */
-                { 0,              SCMP_SYS(add_key)             }, /* keyring is not namespaced */
-                { 0,              SCMP_SYS(afs_syscall)         }, /* obsolete syscall */
-                { 0,              SCMP_SYS(bdflush)             },
+                { 0,              "_sysctl\0"             }, /* obsolete syscall */
+                { 0,              "add_key\0"             }, /* keyring is not namespaced */
+                { 0,              "afs_syscall\0"         }, /* obsolete syscall */
+                { 0,              "bdflush\0"             },
 #ifdef __NR_bpf
-                { 0,              SCMP_SYS(bpf)                 },
+                { 0,              "bpf\0"                 },
 #endif
-                { 0,              SCMP_SYS(break)               }, /* obsolete syscall */
-                { 0,              SCMP_SYS(create_module)       }, /* obsolete syscall */
-                { 0,              SCMP_SYS(ftime)               }, /* obsolete syscall */
-                { 0,              SCMP_SYS(get_kernel_syms)     }, /* obsolete syscall */
-                { 0,              SCMP_SYS(getpmsg)             }, /* obsolete syscall */
-                { 0,              SCMP_SYS(gtty)                }, /* obsolete syscall */
+                { 0,              "break\0"               }, /* obsolete syscall */
+                { 0,              "create_module\0"       }, /* obsolete syscall */
+                { 0,              "ftime\0"               }, /* obsolete syscall */
+                { 0,              "get_kernel_syms\0"     }, /* obsolete syscall */
+                { 0,              "getpmsg\0"             }, /* obsolete syscall */
+                { 0,              "gtty\0"                }, /* obsolete syscall */
 #ifdef __NR_kexec_file_load
-                { 0,              SCMP_SYS(kexec_file_load)     },
+                { 0,              "kexec_file_load\0"     },
 #endif
-                { 0,              SCMP_SYS(kexec_load)          },
-                { 0,              SCMP_SYS(keyctl)              }, /* keyring is not namespaced */
-                { 0,              SCMP_SYS(lock)                }, /* obsolete syscall */
-                { 0,              SCMP_SYS(lookup_dcookie)      },
-                { 0,              SCMP_SYS(mpx)                 }, /* obsolete syscall */
-                { 0,              SCMP_SYS(nfsservctl)          }, /* obsolete syscall */
-                { 0,              SCMP_SYS(open_by_handle_at)   },
-                { 0,              SCMP_SYS(perf_event_open)     },
-                { 0,              SCMP_SYS(prof)                }, /* obsolete syscall */
-                { 0,              SCMP_SYS(profil)              }, /* obsolete syscall */
-                { 0,              SCMP_SYS(putpmsg)             }, /* obsolete syscall */
-                { 0,              SCMP_SYS(query_module)        }, /* obsolete syscall */
-                { 0,              SCMP_SYS(quotactl)            },
-                { 0,              SCMP_SYS(request_key)         }, /* keyring is not namespaced */
-                { 0,              SCMP_SYS(security)            }, /* obsolete syscall */
-                { 0,              SCMP_SYS(sgetmask)            }, /* obsolete syscall */
-                { 0,              SCMP_SYS(ssetmask)            }, /* obsolete syscall */
-                { 0,              SCMP_SYS(stty)                }, /* obsolete syscall */
-                { 0,              SCMP_SYS(swapoff)             },
-                { 0,              SCMP_SYS(swapon)              },
-                { 0,              SCMP_SYS(sysfs)               }, /* obsolete syscall */
-                { 0,              SCMP_SYS(tuxcall)             }, /* obsolete syscall */
-                { 0,              SCMP_SYS(ulimit)              }, /* obsolete syscall */
-                { 0,              SCMP_SYS(uselib)              }, /* obsolete syscall */
-                { 0,              SCMP_SYS(ustat)               }, /* obsolete syscall */
-                { 0,              SCMP_SYS(vserver)             }, /* obsolete syscall */
-                { CAP_SYSLOG,     SCMP_SYS(syslog)              },
-                { CAP_SYS_MODULE, SCMP_SYS(delete_module)       },
-                { CAP_SYS_MODULE, SCMP_SYS(finit_module)        },
-                { CAP_SYS_MODULE, SCMP_SYS(init_module)         },
-                { CAP_SYS_PACCT,  SCMP_SYS(acct)                },
-                { CAP_SYS_PTRACE, SCMP_SYS(process_vm_readv)    },
-                { CAP_SYS_PTRACE, SCMP_SYS(process_vm_writev)   },
-                { CAP_SYS_PTRACE, SCMP_SYS(ptrace)              },
-                { CAP_SYS_RAWIO,  SCMP_SYS(ioperm)              },
-                { CAP_SYS_RAWIO,  SCMP_SYS(iopl)                },
-                { CAP_SYS_RAWIO,  SCMP_SYS(pciconfig_iobase)    },
-                { CAP_SYS_RAWIO,  SCMP_SYS(pciconfig_read)      },
-                { CAP_SYS_RAWIO,  SCMP_SYS(pciconfig_write)     },
-#ifdef __NR_s390_pci_mmio_read
-                { CAP_SYS_RAWIO,  SCMP_SYS(s390_pci_mmio_read)  },
-#endif
-#ifdef __NR_s390_pci_mmio_write
-                { CAP_SYS_RAWIO,  SCMP_SYS(s390_pci_mmio_write) },
-#endif
-                { CAP_SYS_TIME,   SCMP_SYS(adjtimex)            },
-                { CAP_SYS_TIME,   SCMP_SYS(clock_adjtime)       },
-                { CAP_SYS_TIME,   SCMP_SYS(clock_settime)       },
-                { CAP_SYS_TIME,   SCMP_SYS(settimeofday)        },
-                { CAP_SYS_TIME,   SCMP_SYS(stime)               },
+                { 0,              "kexec_load\0"          },
+                { 0,              "keyctl\0"              }, /* keyring is not namespaced */
+                { 0,              "lock\0"                }, /* obsolete syscall */
+                { 0,              "lookup_dcookie\0"      },
+                { 0,              "mpx\0"                 }, /* obsolete syscall */
+                { 0,              "nfsservctl\0"          }, /* obsolete syscall */
+                { 0,              "open_by_handle_at\0"   },
+                { 0,              "perf_event_open\0"     },
+                { 0,              "prof\0"                }, /* obsolete syscall */
+                { 0,              "profil\0"              }, /* obsolete syscall */
+                { 0,              "putpmsg\0"             }, /* obsolete syscall */
+                { 0,              "query_module\0"        }, /* obsolete syscall */
+                { 0,              "quotactl\0"            },
+                { 0,              "request_key\0"         }, /* keyring is not namespaced */
+                { 0,              "security\0"            }, /* obsolete syscall */
+                { 0,              "sgetmask\0"            }, /* obsolete syscall */
+                { 0,              "ssetmask\0"            }, /* obsolete syscall */
+                { 0,              "stty\0"                }, /* obsolete syscall */
+                { 0,              "swapoff\0"             },
+                { 0,              "swapon\0"              },
+                { 0,              "sysfs\0"               }, /* obsolete syscall */
+                { 0,              "tuxcall\0"             }, /* obsolete syscall */
+                { 0,              "ulimit\0"              }, /* obsolete syscall */
+                { 0,              "uselib\0"              }, /* obsolete syscall */
+                { 0,              "ustat\0"               }, /* obsolete syscall */
+                { 0,              "vserver\0"             }, /* obsolete syscall */
+                { CAP_SYSLOG,     "syslog\0"              },
+                { CAP_SYS_MODULE, "@module\0"             },
+                { CAP_SYS_PACCT,  "acct\0"                },
+                { CAP_SYS_PTRACE, "@debug\0"              },
+                { CAP_SYS_RAWIO,  "@raw-io\0"             },
+                { CAP_SYS_TIME,   "@clock\0"              },
         };
         unsigned i;
         int r, c = 0;
@@ -119,7 +101,7 @@ static int seccomp_add_default_syscall_filter(
                 if (blacklist[i].capability != 0 && (cap_list_retain & (1ULL << blacklist[i].capability)))
                         continue;
 
-                r = seccomp_rule_add_exact(ctx, SCMP_ACT_ERRNO(EPERM), blacklist[i].syscall_num, 0);
+                r = seccomp_add_syscall_filter_set(ctx, SCMP_ACT_ERRNO(EPERM), blacklist[i].syscall_name, 0);
                 if (r < 0) {
                         /* If the system call is not known on this architecture, then that's fine, let's ignore it */
                         _cleanup_free_ char *n = NULL;

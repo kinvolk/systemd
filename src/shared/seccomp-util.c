@@ -659,7 +659,7 @@ const SyscallFilterSet *syscall_filter_set_find(const char *name) {
         return NULL;
 }
 
-static int seccomp_add_syscall_filter_set(
+int seccomp_add_syscall_filter_set(
                 scmp_filter_ctx seccomp,
                 uint32_t default_action,
                 const SyscallFilterSet *set,
