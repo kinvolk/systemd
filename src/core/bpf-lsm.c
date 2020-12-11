@@ -189,12 +189,13 @@ int lsm_bpf_setup(void) {
         return 0;
 }
 
-int bpf_restrict_filesystems(char **filesystems, char *cgroup_path) {
+int bpf_restrict_filesystems(const Set *filesystems, const bool allow_list, const char *cgroup_path) {
         _cleanup_close_ int inner_map_fd = -1, outer_map_fd = -1;
         _cleanup_free_ char *path = NULL;
         uint64_t cgroup_id;
-        uint32_t magic, dummy_value = 1;
-        char **f;
+        uint32_t dummy_value = 1, zero = 0;
+        const char *fs;
+        statfs_f_type_t *magic;
         int r;
 
         assert(filesystems);
@@ -224,25 +225,35 @@ int bpf_restrict_filesystems(char **filesystems, char *cgroup_path) {
         if (bpf_map_update_elem(outer_map_fd, &cgroup_id, &inner_map_fd, BPF_ANY) != 0)
                 return log_error_errno(errno, "Error populating LSM BPF map: %m");
 
-        STRV_FOREACH(f, filesystems) {
-                if (DEBUG_LOGGING)
-                        log_debug("Restricting filesystem access to: %s", *f);
+        uint32_t allow = allow_list;
 
-                r = fs_type_from_string(*f, &magic);
-                if (r == -EINVAL) {
-                        log_warning("Unknown filesystem '%s'. Ignoring.", *f);
+        /* Use key 0 to store whether this is an allow list or a deny list */
+        if (bpf_map_update_elem(inner_map_fd, &zero, &allow, BPF_ANY) != 0)
+                return log_error_errno(errno, "Error initializing BPF map: %m");
+
+        SET_FOREACH(fs, filesystems) {
+                int i;
+
+                r = fs_type_from_string(fs, &magic);
+                if (r < 0) {
+                        log_warning("Invalid filesystem name '%s', ignoring.", fs);
                         continue;
                 }
-                if (r < 0)
-                        return r;
 
-                if (bpf_map_update_elem(inner_map_fd, &magic, &dummy_value, BPF_ANY) != 0) {
-                        r = log_error_errno(errno, "Failed to update BPF map: %m");
+                log_debug("Restricting filesystem access to '%s'", fs);
 
-                        if (bpf_map_delete_elem(outer_map_fd, &cgroup_id) != 0)
-                                log_debug_errno(errno, "Failed to delete cgroup entry from LSM BPF map: %m");
+                for (i=0; i<FILESYSTEM_MAGIC_MAX; i++) {
+                        if (magic[i] == 0)
+                                break;
 
-                        return r;
+                        if (bpf_map_update_elem(inner_map_fd, &magic[i], &dummy_value, BPF_ANY) != 0) {
+                                r = log_error_errno(errno, "Failed to update BPF map: %m");
+
+                                if (bpf_map_delete_elem(outer_map_fd, &cgroup_id) != 0)
+                                        log_debug_errno(errno, "Failed to delete cgroup entry from LSM BPF map: %m");
+
+                                return r;
+                        }
                 }
         }
 
@@ -283,14 +294,82 @@ int lsm_bpf_supported(void) {
 }
 
 int lsm_bpf_setup(void) {
-        return -EOPNOTSUPP;
+        return log_debug_errno(SYNTHETIC_ERRNO(EOPNOTSUPP), "Failed to set up LSM BPF: %m");
 }
 
-int bpf_restrict_filesystems(char **filesystems, char *cgroup_path) {
-        return -EOPNOTSUPP;
+int bpf_restrict_filesystems(const Set *magic_numbers, char *cgroup_path) {
+        return log_debug_errno(SYNTHETIC_ERRNO(EOPNOTSUPP), "Failed to restrict filesystems using LSM BPF: %m");
 }
 
 int cleanup_lsm_bpf(const char *cgroup_path) {
         return 0;
 }
 #endif
+
+int bpf_lsm_parse_filesystem(
+                const char *name,
+                Set *filesystems,
+                FilesystemParseFlags flags,
+                const char *unit,
+                const char *filename,
+                unsigned line) {
+        char *fs;
+        int r;
+
+        assert(name);
+        assert(filesystems);
+
+        if (name[0] == '@') {
+                const FilesystemSet *set;
+                const char *i;
+
+                set = filesystem_set_find(name);
+                if (!set) {
+                        log_syntax(unit, flags & FILESYSTEM_PARSE_LOG ? LOG_WARNING : LOG_DEBUG, filename, line, 0,
+                                   "Unknown filesystem group, ignoring: %s", name);
+                        return 0;
+                }
+
+                NULSTR_FOREACH(i, set->value) {
+                        /* Call ourselves again, for the group to parse. Note that we downgrade logging here (i.e. take
+                         * away the FILESYSTEM_PARSE_LOG flag) since any issues in the group table are our own problem,
+                         * not a problem in user configuration data and we shouldn't pretend otherwise by complaining
+                         * about them. */
+                        r = bpf_lsm_parse_filesystem(i, filesystems, flags &~ FILESYSTEM_PARSE_LOG, unit, filename, line);
+                        if (r < 0)
+                                return r;
+                }
+        } else {
+                /* If we previously wanted to forbid access to a filesystem and now
+                 * we want to allow it, then remove it from the list. */
+                if (!(flags & FILESYSTEM_PARSE_INVERT) == !!(flags & FILESYSTEM_PARSE_ALLOW_LIST)) {
+                        SET_FOREACH(fs, filesystems) {
+                                if (streq(fs, name)) {
+                                        /* Already present, ignoring */
+                                        return 0;
+                                }
+                        }
+
+                        r = set_put_strdup(&filesystems, name);
+                        if (r < 0)
+                                switch (r) {
+                                case -ENOMEM:
+                                        return flags & FILESYSTEM_PARSE_LOG ? log_oom() : -ENOMEM;
+                                case -EEXIST:
+                                        /* Alredy in set, ignore */
+                                        break;
+                                default:
+                                        return r;
+                                }
+                } else {
+                        SET_FOREACH(fs, filesystems) {
+                                if (streq(fs, name)) {
+                                        free(set_remove(filesystems, fs));
+                                        break;
+                                }
+                        }
+                }
+        }
+
+        return 0;
+}
