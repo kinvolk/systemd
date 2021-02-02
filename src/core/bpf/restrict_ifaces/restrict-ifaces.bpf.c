@@ -10,14 +10,12 @@
  * The interpretation of the map depends on the value saved with key 0,
  * if it's 1 then it's an allow-list.
  */
-struct ifaces_map_t {
+struct {
         __uint(type, BPF_MAP_TYPE_HASH);
         __type(key, __u32);
         __type(value, __u8);
         __uint(max_entries, 1); /* Set from user space with bpf_map__resize helper */
-};
-
-struct ifaces_map_t ifaces_map SEC(".maps");
+} ifaces_map SEC(".maps");
 
 #define DROP 0
 #define PASS 1
