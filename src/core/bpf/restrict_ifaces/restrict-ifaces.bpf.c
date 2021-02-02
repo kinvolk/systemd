@@ -6,9 +6,10 @@
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 
+volatile __u8 is_allow_list = 1;
+
 /* Map containing the network interfaces indexes.
- * The interpretation of the map depends on the value saved with key 0,
- * if it's 1 then it's an allow-list.
+ * The interpretation of the map depends on the value of is_allow_list.
  */
 struct {
         __uint(type, BPF_MAP_TYPE_HASH);
@@ -22,17 +23,11 @@ struct {
 
 static inline int restrict_network_interfaces_impl(struct __sk_buff *sk) {
         __u32 zero = 0, ifindex;
-        __u8 *is_allow_list;
         __u8 *lookup_result;
-
-        is_allow_list = bpf_map_lookup_elem(&ifaces_map, &zero);
-        if (!is_allow_list)
-                /* If there is not any element with key zero then the map is malformed */
-                return DROP;
 
         ifindex = sk->ifindex;
         lookup_result = bpf_map_lookup_elem(&ifaces_map, &ifindex);
-        if (*is_allow_list) {
+        if (is_allow_list) {
             /* allow-list: let the packet pass if iface in the list */
             if (lookup_result)
                 return PASS;
