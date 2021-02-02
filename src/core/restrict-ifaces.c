@@ -27,7 +27,9 @@ static int prepare_bpf_object(Unit* u, bool is_allow_list,
         assert(restrict_network_interfaces);
         assert(ret_object);
 
-        r = bpf_object_new(restrict_ifaces_hexdump_buffer, sizeof(restrict_ifaces_hexdump_buffer), &object);
+        /* pass a short name to avoid trimming part of the name */
+        r = bpf_object_new(restrict_ifaces_hexdump_buffer,
+                sizeof(restrict_ifaces_hexdump_buffer), "rifaces", &object);
         if (r < 0)
                 return log_unit_error_errno(u, r, "Failed to create BPF object from hexdump buffer: %m");
 
@@ -107,7 +109,8 @@ int restrict_network_interfaces_supported(void) {
          * BPF_PROG_TYPE_CGROUP_SKB program type is supported by kernel and
          * if resource limits permit locking enough memory.
          */
-        r = bpf_object_new(restrict_ifaces_hexdump_buffer, sizeof(restrict_ifaces_hexdump_buffer), &obj);
+        r = bpf_object_new(restrict_ifaces_hexdump_buffer,
+                sizeof(restrict_ifaces_hexdump_buffer), "restrict-ifaces", &obj);
         if (r < 0) {
                 log_debug_errno(r, "Failed to create BPF object from hexdump buffer: %m");
                 return supported  = 0;
