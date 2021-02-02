@@ -22,7 +22,9 @@ static int prepare_bpf_object(Unit* u, bool is_allow_list,
         char *iface;
         int map_fd, r;
         uint8_t dummy = 0;
-        uint32_t ifindex;
+        uint32_t ifindex, zero=0;
+        struct bpf_map *bss_map;
+        uint8_t is_allow_list_u8 = (uint8_t) is_allow_list;
 
         assert(restrict_network_interfaces);
         assert(ret_object);
@@ -33,8 +35,7 @@ static int prepare_bpf_object(Unit* u, bool is_allow_list,
         if (r < 0)
                 return log_unit_error_errno(u, r, "Failed to create BPF object from hexdump buffer: %m");
 
-        /* Network ifaces + key zero for control */
-        r = bpf_object_resize_map(object, map_name, set_size(restrict_network_interfaces) + 1);
+        r = bpf_object_resize_map(object, map_name, set_size(restrict_network_interfaces));
         if (r < 0)
                 return log_unit_error_errno(u, r, "Failed to resize BPF map '%s': %m", map_name);
 
@@ -42,17 +43,18 @@ static int prepare_bpf_object(Unit* u, bool is_allow_list,
         if (r < 0)
                 return log_unit_error_errno(u, r, "Failed to load BPF object: %m");
 
+        /* set value of is_allow_list global variable */
+        bss_map = bpf_object__find_map_by_name(object, "rifaces.data");
+        if (!bss_map)
+                return log_unit_error_errno(u, r, "Failed to find bss map");
+
+        r = bpf_map_update_elem(bpf_map__fd(bss_map), &zero, &is_allow_list_u8, BPF_ANY);
+        if (r < 0)
+                return log_unit_error_errno(u, r, "Failed to update bss map: %m");
+
         map_fd = bpf_object_get_map_fd(object, map_name);
         if (map_fd < 0)
                 return log_unit_error_errno(u, r, "Failed to get BPF map '%s' fd: %m", map_name);
-
-        /* Key zero indicates whether this is an allow or deny-list approach */
-        ifindex = 0;
-        dummy = (uint8_t) is_allow_list;
-        r = bpf_map_update_elem(map_fd, &ifindex, &dummy, BPF_ANY);
-        if (r < 0)
-                return log_unit_error_errno(u, r, "Failed to update BPF map '%s' fd: %m", map_name);
-        dummy = 0;
 
         SET_FOREACH(iface, restrict_network_interfaces) {
                 ifindex = if_nametoindex(iface);
